@@ -90,10 +90,12 @@ class AdaptiveClustering : public rclcpp::Node {
         std::bind(&AdaptiveClustering::pointCloudCallback, this, std::placeholders::_1));
 
     /*** Publishers ***/
+    if (do_ground_ceiling_rm_) {
+      cloud_filtered_pub_ =
+          this->create_publisher<PointCloud2>("cloud_filtered", rclcpp::SystemDefaultsQoS());
+    }
     cluster_array_pub_ =
         this->create_publisher<ClusterArray>("clusters", rclcpp::SystemDefaultsQoS());
-    cloud_filtered_pub_ =
-        this->create_publisher<PointCloud2>("cloud_filtered", rclcpp::SystemDefaultsQoS());
     pose_array_pub_ = this->create_publisher<PoseArray>("poses", rclcpp::SystemDefaultsQoS());
     marker_array_pub_ =
         this->create_publisher<MarkerArray>("clustering_markers", rclcpp::SystemDefaultsQoS());
@@ -165,7 +167,7 @@ void AdaptiveClustering::pointCloudCallback(PointCloud2::UniquePtr ros_pc2_in) {
   /*** Remove ground and ceiling ***/
   pcl::IndicesPtr pc_indices(new std::vector<int>);
   if (do_ground_ceiling_rm_) {
-    for(size_t i = 0; i < pcl_pc_in->size(); ++i) {
+    for (size_t i = 0; i < pcl_pc_in->size(); ++i) {
       if (i % leaf_) continue;
       if (pcl_pc_in->points[i].z < z_axis_min_ || pcl_pc_in->points[i].z > z_axis_max_) continue;
       pc_indices->push_back(i);
@@ -185,7 +187,8 @@ void AdaptiveClustering::pointCloudCallback(PointCloud2::UniquePtr ros_pc2_in) {
       float d2 = pcl_pc_in->points[(*pc_indices)[i]].x * pcl_pc_in->points[(*pc_indices)[i]].x +
                  pcl_pc_in->points[(*pc_indices)[i]].y * pcl_pc_in->points[(*pc_indices)[i]].y +
                  pcl_pc_in->points[(*pc_indices)[i]].z * pcl_pc_in->points[(*pc_indices)[i]].z;
-      if (d2 > radius_min_ * radius_min_ && d2 < radius_max_ * radius_max_ && d2 > range * range && d2 <= (range + regions_[j]) * (range + regions_[j])) {
+      if (d2 > radius_min_ * radius_min_ && d2 < radius_max_ * radius_max_ && d2 > range * range &&
+          d2 <= (range + regions_[j]) * (range + regions_[j])) {
         indices_array[j].push_back((*pc_indices)[i]);
         break;
       }
@@ -340,8 +343,8 @@ void AdaptiveClustering::pointCloudCallback(PointCloud2::UniquePtr ros_pc2_in) {
   if (pose_array_pub_->get_subscription_count() > 0) {
     std::unique_ptr<PoseArray> pose_array(new PoseArray);
     pose_array->poses.resize(clusters.size());
-    std::transform(centroid_coords.begin(), centroid_coords.end(),
-                   pose_array->poses.begin(), [](const std::vector<float> &c) {
+    std::transform(centroid_coords.begin(), centroid_coords.end(), pose_array->poses.begin(),
+                   [](const std::vector<float> &c) {
                      geometry_msgs::msg::Pose pose;
                      pose.position.x = c[0];
                      pose.position.y = c[1];
