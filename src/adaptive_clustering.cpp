@@ -102,11 +102,11 @@ class AdaptiveClustering : public rclcpp::Node {
 
 #ifdef AUTOWARE_AUTO_PERCEPTION_MSGS__MSG__BOUNDING_BOX_HPP_
     bounding_boxes_pub_ = this->create_publisher<BoundingBoxArray>("/perception/lidar_clusters",
-                                                                   rclcpp::SystemDefaultQos());
+                                                                   rclcpp::SystemDefaultsQoS());
     wall_boxes_pub_ = this->create_publisher<BoundingBoxArray>("/perception/lidar_clusters_wall",
-                                                               rclcpp::SystemDefaultQoS());
+                                                               rclcpp::SystemDefaultsQoS());
     obstacle_boxes_pub_ = this->create_publisher<BoundingBoxArray>(
-        "/perception/lidar_clusters_obstacle", rclcpp::SystemDefaultQos());
+        "/perception/lidar_clusters_obstacle", rclcpp::SystemDefaultsQoS());
 #endif
     obstacle_marker_array_pub_ = this->create_publisher<MarkerArray>(
         "/perception/lidar_clusters_obstacle_marker", rclcpp::SystemDefaultsQoS());
@@ -146,6 +146,11 @@ class AdaptiveClustering : public rclcpp::Node {
   rclcpp::Publisher<PoseArray>::SharedPtr pose_array_pub_;
   rclcpp::Publisher<MarkerArray>::SharedPtr marker_array_pub_, obstacle_marker_array_pub_;
   rclcpp::Subscription<PointCloud2>::SharedPtr point_cloud_sub_;
+
+#ifdef AUTOWARE_AUTO_PERCEPTION_MSGS__MSG__BOUNDING_BOX_HPP_
+  rclcpp::Publisher<BoundingBoxArray>::SharedPtr bounding_boxes_pub_, wall_boxes_pub_,
+                                                 obstacle_boxes_pub_;
+#endif
 
   // fps calculation
   int frames;
@@ -404,15 +409,22 @@ void AdaptiveClustering::pointCloudCallback(PointCloud2::UniquePtr ros_pc2_in) {
   obstacle_bounding_boxes->header = ros_pc2_in->header;
   autoware_auto_perception_msgs::msg::BoundingBox box;
   for (size_t i = 0; i < clusters.size(); i++) {
-    box.centroid = marker_array->markers[i].pose.position;
-    box.orientation = marker_array->markers[i].pose.orientation;
-    box.size = marker_array->markers[i].scale;
-    bounding_boxes.boxes.push_back(box);
+    box.centroid.x = marker_array->markers[i].pose.position.x;
+    box.centroid.y = marker_array->markers[i].pose.position.y;
+    box.centroid.z = marker_array->markers[i].pose.position.z;
+    box.orientation.x = marker_array->markers[i].pose.orientation.x;
+    box.orientation.y = marker_array->markers[i].pose.orientation.y;
+    box.orientation.z = marker_array->markers[i].pose.orientation.z;
+    box.orientation.w = marker_array->markers[i].pose.orientation.w;
+    box.size.x = marker_array->markers[i].scale.x;
+    box.size.y = marker_array->markers[i].scale.y;
+    box.size.z = marker_array->markers[i].scale.z;
+    bounding_boxes->boxes.push_back(box);
     // figure out geometrically if it is a wall
     if (isWall[i]) {
-      wall_bounding_boxes.boxes.push_back(box);
+      wall_bounding_boxes->boxes.push_back(box);
     } else {
-      obstacle_bounding_boxes.boxes.push_back(box);
+      obstacle_bounding_boxes->boxes.push_back(box);
     }
   }
   bounding_boxes_pub_->publish(std::move(bounding_boxes));
