@@ -1,5 +1,5 @@
+
 // Copyright (C) 2018  Zhi Yan and Li Sun
-// Copyright (C) 2023  Andres Hoyos and Haoguang Yang
 
 // This program is free software: you can redistribute it and/or modify it
 // under the terms of the GNU General Public License as published by the Free
@@ -14,438 +14,529 @@
 // You should have received a copy of the GNU General Public License along
 // with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-// ROS 2
-#include <geometry_msgs/msg/pose_array.hpp>
-#include <rclcpp/rclcpp.hpp>
-#include <sensor_msgs/msg/point_cloud2.hpp>
-#include <visualization_msgs/msg/marker.hpp>
+// ROS
+#include "rclcpp/rclcpp.hpp"
+#include "sensor_msgs/msg/point_cloud2.hpp"
+#include "geometry_msgs/msg/pose_array.hpp"
+#include "visualization_msgs/msg/marker_array.hpp"
+#include "blackandgold_msgs/msg/cluster_array.hpp"
+#include "blackandgold_msgs/msg/polynomial4.hpp"
+#include "blackandgold_msgs/msg/polynomial4_array.hpp"
+#include <autoware_auto_perception_msgs/msg/bounding_box_array.hpp>
+#include <autoware_auto_perception_msgs/msg/bounding_box.hpp>
 #include <visualization_msgs/msg/marker_array.hpp>
-
-#include "adaptive_clustering/msg/cluster_array.hpp"
+#include <visualization_msgs/msg/marker.hpp>
 
 // PCL
-#include <pcl/common/centroid.h>
-#include <pcl/common/common.h>
-#include <pcl/filters/passthrough.h>
-#include <pcl/filters/voxel_grid.h>
-#include <pcl/segmentation/extract_clusters.h>
-#include <pcl_conversions/pcl_conversions.h>
+#include "pcl_conversions/pcl_conversions.h"
+#include "pcl/filters/voxel_grid.h" 
+#include "pcl/filters/passthrough.h" 
+#include "pcl/segmentation/extract_clusters.h" 
+#include "pcl/common/common.h" 
+#include "pcl/common/centroid.h"
+#include <iostream>
+#include <cmath>
 
-// for portability -- not every project is shipped with autoware.auto
-#if __has_include(<autoware_auto_perception_msgs/msg/bounding_box.hpp>)
-#include <autoware_auto_perception_msgs/msg/bounding_box.hpp>
-#include <autoware_auto_perception_msgs/msg/bounding_box_array.hpp>
-
-using autoware_auto_perception_msgs::msg::BoundingBox;
-using autoware_auto_perception_msgs::msg::BoundingBoxArray;
-#endif
 
 using namespace std::chrono_literals;
-using adaptive_clustering::msg::ClusterArray;
-using geometry_msgs::msg::Pose;
-using geometry_msgs::msg::PoseArray;
-using sensor_msgs::msg::PointCloud2;
-using visualization_msgs::msg::Marker;
-using visualization_msgs::msg::MarkerArray;
 
-// #define LOG
-
+//#define LOG
 class AdaptiveClustering : public rclcpp::Node {
- public:
-  AdaptiveClustering() : Node("adaptive_clustering") {
-    print_fps_ = this->declare_parameter<bool>("print_fps", false);
-    cluster_size_min_ =
-        static_cast<unsigned int>(this->declare_parameter<int>("cluster_size_min", 10));
-    cluster_size_max_ =
-        static_cast<unsigned int>(this->declare_parameter<int>("cluster_size_max", 5000));
-    // pre-processing options (ground removal)
-    do_ground_ceiling_rm_ = this->declare_parameter<bool>("perform_ground_ceiling_removal", true);
-    z_axis_min_ = this->declare_parameter<float>("z_axis_min", -0.8);
-    z_axis_max_ = this->declare_parameter<float>("z_axis_max", 10.0);
-    // Divide the point cloud into nested circular regions centred at the sensor for region-wise
-    // clustering For more details, see our IROS-17 paper "Online learning for human classification
-    // in 3D LiDAR-based tracking"
-    sensor_model_ = this->declare_parameter<std::string>("sensor_model", "");
-    if (sensor_model_.compare("VLP-16") == 0) {
-      regions_ = std::vector<long int>{2, 3, 3, 3, 3, 3, 3, 2, 3, 3, 3, 3, 3, 3};
-    } else if (sensor_model_.compare("HDL-32E") == 0) {
-      regions_ = std::vector<long int>{4, 5, 4, 5, 4, 5, 5, 4, 5, 4, 5, 5, 5, 5};
-    } else if (sensor_model_.compare("HDL-64E") == 0) {
-      regions_ = std::vector<long int>{14, 14, 14, 15, 14};
-    } else {
-      regions_ = this->declare_parameter<std::vector<long int>>(
-          "circular_region_width", std::vector<long int>{5, 20, 20, 30, 10});
-    }
-    // post-processing options
-    leaf_ = this->declare_parameter<int>("leaf", 3);
-    k_merging_threshold_ = this->declare_parameter<float>("k_merging_threshold", 0.1);
-    z_merging_threshold_ = this->declare_parameter<float>("z_merging_threshold", 0.0);
-    radius_min_ = this->declare_parameter<float>("radius_min", 0.4);
-    radius_max_ = this->declare_parameter<float>("radius_max", 120.0);
-    generate_bounding_boxes_ = this->declare_parameter<bool>("generate_bounding_boxes", true);
+
+  public:
+    AdaptiveClustering(): Node("adaptive_clustering"){
+
+    
+    //private_nh.param<std::string>("sensor_model", sensor_model, "VLP-16"); // VLP-16, HDL-32E, HDL-64E
+    this->declare_parameter<std::string>("sensor_model", "VLP-16");
+    //private_nh.param<bool>("print_fps", print_fps_, false);
+    this->declare_parameter<bool>("print_fps", false);
+    //private_nh.param<float>("z_axis_min", z_axis_min_, -0.8);
+    this->declare_parameter<float>("z_axis_min", -0.8);
+    //private_nh.param<float>("z_axis_max", z_axis_max_, 2.0);
+    this->declare_parameter<float>("z_axis_max", 10.0);
+    //private_nh.param<int>("cluster_size_min", s, 3);
+    this->declare_parameter<int>("cluster_size_min", 10);
+    //private_nh.param<int>("cluster_size_max", cluster_size_max_, 2200000);
+    this->declare_parameter<int>("cluster_size_max", 5000);
+    //private_nh.param<int>("leaf", leaf_, 3);
+    this->declare_parameter<int>("leaf", 3);
+    //private_nh.param<float>("k_merging_threshold", k_merging_threshold_, 0.1);
+    this->declare_parameter<float>("k_merging_threshold", 0.1);
+    //private_nh.param<float>("z_merging_threshold", z_merging_threshold_, 0.0);
+    this->declare_parameter<float>("z_merging_threshold", 0.0);
+    //private_nh.param<float>("radius_min", radius_min_, 0.0);
+    this->declare_parameter<float>("radius_min", 0.4);
+    //private_nh.param<float>("radius_max", radius_max_, 30.0);
+    this->declare_parameter<float>("radius_max", 120.0);
+    // Whether we want to output bounding boxes, or the original algorithm line markers
+    this->declare_parameter<bool>("generate_bounding_boxes", true);
+
+
+    sensor_model = this->get_parameter("sensor_model").get_parameter_value().get<std::string>();
+    print_fps_ = this->get_parameter("print_fps").get_parameter_value().get<bool>();
+    z_axis_min_ = this->get_parameter("z_axis_min").get_parameter_value().get<float>();
+    z_axis_max_ = this->get_parameter("z_axis_max").get_parameter_value().get<float>();
+    cluster_size_min_ = this->get_parameter("cluster_size_min").get_parameter_value().get<int>();
+    cluster_size_max_ = this->get_parameter("cluster_size_max").get_parameter_value().get<int>();
+    leaf_ = this->get_parameter("leaf").get_parameter_value().get<int>();
+    k_merging_threshold_ = this->get_parameter("k_merging_threshold").get_parameter_value().get<float>();
+    z_merging_threshold_ = this->get_parameter("z_merging_threshold").get_parameter_value().get<float>();
+    radius_min_ = this->get_parameter("radius_min").get_parameter_value().get<float>();
+    radius_max_ = this->get_parameter("radius_max").get_parameter_value().get<float>();
+    generate_bounding_boxes = this->get_parameter("generate_bounding_boxes").get_parameter_value().get<bool>();
 
     /*** Subscribers ***/
-    point_cloud_sub_ = this->create_subscription<PointCloud2>(
-        "/lidar_points", rclcpp::SensorDataQoS(),
-        std::bind(&AdaptiveClustering::pointCloudCallback, this, std::placeholders::_1));
+    point_cloud_sub = this->create_subscription<sensor_msgs::msg::PointCloud2>("/perception/points_nonground", 10, std::bind(&AdaptiveClustering::pointCloudCallback, 
+      this, std::placeholders::_1));
+    //wall_points_sub = this->create_subscription<blackandgold_msgs::msg::Polynomial4Array>("/perception/wall_point_markers", 10, std::bind(&AdaptiveClustering::wallsCallback, 
+    //  this, std::placeholders::_1));
+
+    //ros::Subscriber point_cloud_sub = nh.subscribe<sensor_msgs::PointCloud2>("velodyne_points", 1, pointCloudCallback);
 
     /*** Publishers ***/
-    if (do_ground_ceiling_rm_) {
-      cloud_filtered_pub_ =
-          this->create_publisher<PointCloud2>("cloud_filtered", rclcpp::SystemDefaultsQoS());
-    }
-    cluster_array_pub_ =
-        this->create_publisher<ClusterArray>("clusters", rclcpp::SystemDefaultsQoS());
-    pose_array_pub_ = this->create_publisher<PoseArray>("poses", rclcpp::SystemDefaultsQoS());
-    marker_array_pub_ =
-        this->create_publisher<MarkerArray>("clustering_markers", rclcpp::SystemDefaultsQoS());
+    //cluster_array_pub_ = private_nh.advertise<adaptive_clustering::ClusterArray>("clusters", 100);
+    cluster_array_pub_ = this->create_publisher<blackandgold_msgs::msg::ClusterArray>("clusters", 10);
+    //cloud_filtered_pub_ = private_nh.advertise<sensor_msgs::PointCloud2>("cloud_filtered", 100);
+    cloud_filtered_pub_ = this->create_publisher<sensor_msgs::msg::PointCloud2>("cloud_filtered", 10);
+    //pose_array_pub_ = private_nh.advertise<geometry_msgs::PoseArray>("poses", 100);
+    pose_array_pub_ = this->create_publisher<geometry_msgs::msg::PoseArray>("poses", 10);
+    //marker_array_pub_ = private_nh.advertise<visualization_msgs::MarkerArray>("markers", 100);
+    marker_array_pub_ = this->create_publisher<visualization_msgs::msg::MarkerArray>("clustering_markers", 10);
 
-#ifdef AUTOWARE_AUTO_PERCEPTION_MSGS__MSG__BOUNDING_BOX_HPP_
-    bounding_boxes_pub_ = this->create_publisher<BoundingBoxArray>("/perception/lidar_clusters",
-                                                                   rclcpp::SystemDefaultsQoS());
-    wall_boxes_pub_ = this->create_publisher<BoundingBoxArray>("/perception/lidar_clusters_wall",
-                                                               rclcpp::SystemDefaultsQoS());
-    obstacle_boxes_pub_ = this->create_publisher<BoundingBoxArray>(
-        "/perception/lidar_clusters_obstacle", rclcpp::SystemDefaultsQoS());
-#endif
-    obstacle_marker_array_pub_ = this->create_publisher<MarkerArray>(
-        "/perception/lidar_clusters_obstacle_marker", rclcpp::SystemDefaultsQoS());
+    bounding_boxes_pub_ = this->create_publisher<autoware_auto_perception_msgs::msg::BoundingBoxArray>("/perception/lidar_bboxes", 10);
+    vehicle_boxes_pub_ = this->create_publisher<autoware_auto_perception_msgs::msg::BoundingBoxArray>("/perception/lidar_vehicle_bboxes", 10);
+    wall_boxes_pub_ = this->create_publisher<autoware_auto_perception_msgs::msg::BoundingBoxArray>("/perception/lidar_wall_bboxes", 10);
+    vehicle_marker_array_pub_ = this->create_publisher<visualization_msgs::msg::MarkerArray>("/perception/vehicle_lidar_markers", 10);
 
-    // fps initialization
-    reset = true;
+
+    regions_[0] = 5; regions_[1] = 20; regions_[2] = 30; regions_[3] = 30; regions_[4] = 30; // FIXME: Add these to parameter files
+
+    reset = true;//fps
     frames = 0;
-    start_time = this->now();
+    start_time = clock();
+
   }
+  
+  private:
 
- private:
-  void pointCloudCallback(PointCloud2::UniquePtr ros_pc2_in);
+    // Polynomial structure:
+    struct RootsAndCount 
+    {
+      int count;
+      float roots[3];
+    };
 
-  bool print_fps_;
-  // If a pre-processed point cloud is used, we do't need the internal heuristics-based ground
-  // removal stage.
-  bool do_ground_ceiling_rm_;
-  std::string sensor_model_;
-  int leaf_;
-  float z_axis_min_;
-  float z_axis_max_;
-  unsigned int cluster_size_min_;
-  unsigned int cluster_size_max_;
 
-  const int region_max_ = 10;  // Change this value to match how far you want to detect.
-  std::vector<long int> regions_;
+    bool isOutOfBounds_v2(blackandgold_msgs::msg::Polynomial4Array polynomials, autoware_auto_perception_msgs::msg::BoundingBox box) const
+    {
+      for(unsigned int i = 0; i < polynomials.polynomials.size(); i++) 
+      {
+        if (box.centroid.x >= polynomials.polynomials[i].x_min.data && 
+          box.centroid.x <= polynomials.polynomials[i].x_max.data) 
+        {
+          auto polynomial = polynomials.polynomials[i].polynomial;
+          float threshold_value = polynomial.data[0]*pow(box.centroid.x,4) + polynomial.data[1]*pow(box.centroid.x,3)
+          + polynomial.data[2]*pow(box.centroid.x,2)  + polynomial.data[3]*box.centroid.x + polynomial.data[4];
+          
 
-  // post-processing of clustering results
-  float k_merging_threshold_;
-  float z_merging_threshold_;
-  float radius_min_;
-  float radius_max_;
-  bool generate_bounding_boxes_;
 
-  rclcpp::Publisher<ClusterArray>::SharedPtr cluster_array_pub_;
-  rclcpp::Publisher<PointCloud2>::SharedPtr cloud_filtered_pub_;
-  rclcpp::Publisher<PoseArray>::SharedPtr pose_array_pub_;
-  rclcpp::Publisher<MarkerArray>::SharedPtr marker_array_pub_, obstacle_marker_array_pub_;
-  rclcpp::Subscription<PointCloud2>::SharedPtr point_cloud_sub_;
+          if (abs(box.centroid.y) >= abs(threshold_value) - 1.0 && std::signbit(box.centroid.y) == std::signbit(threshold_value))
+          {
+            RCLCPP_INFO(this->get_logger(), "Threshold: '%f'", threshold_value);
+            return false;
+          }
 
-#ifdef AUTOWARE_AUTO_PERCEPTION_MSGS__MSG__BOUNDING_BOX_HPP_
-  rclcpp::Publisher<BoundingBoxArray>::SharedPtr bounding_boxes_pub_, wall_boxes_pub_,
-                                                 obstacle_boxes_pub_;
-#endif
-
-  // fps calculation
-  int frames;
-  rclcpp::Time start_time;
-  bool reset = true;
-};
-
-void AdaptiveClustering::pointCloudCallback(PointCloud2::UniquePtr ros_pc2_in) {
-  if (print_fps_ && reset) {
-    frames = 0;
-    start_time = this->now();
-    reset = false;
-  }  // fps
-
-  /*** Convert ROS message to PCL ***/
-  pcl::PointCloud<pcl::PointXYZI>::Ptr pcl_pc_in(new pcl::PointCloud<pcl::PointXYZI>);
-  pcl::fromROSMsg(*ros_pc2_in, *pcl_pc_in);
-
-  /*** Remove ground and ceiling ***/
-  pcl::IndicesPtr pc_indices(new std::vector<int>);
-  if (do_ground_ceiling_rm_) {
-    for (size_t i = 0; i < pcl_pc_in->size(); ++i) {
-      if (i % leaf_) continue;
-      if (pcl_pc_in->points[i].z < z_axis_min_ || pcl_pc_in->points[i].z > z_axis_max_) continue;
-      pc_indices->push_back(i);
-    }
-  } else {
-    pc_indices->resize(pcl_pc_in->size());
-    // sequentially increment from 1 to size of cloud
-    std::iota(pc_indices->begin(), pc_indices->end(), 1);
-  }
-
-  /*** Divide the point cloud into nested circular regions ***/
-  std::vector<std::vector<int>> indices_array{};
-  indices_array.resize(region_max_);
-  for (size_t i = 0; i < pc_indices->size(); i++) {
-    float range = 0.0;
-    for (int j = 0; j < region_max_; j++) {
-      float d2 = pcl_pc_in->points[(*pc_indices)[i]].x * pcl_pc_in->points[(*pc_indices)[i]].x +
-                 pcl_pc_in->points[(*pc_indices)[i]].y * pcl_pc_in->points[(*pc_indices)[i]].y +
-                 pcl_pc_in->points[(*pc_indices)[i]].z * pcl_pc_in->points[(*pc_indices)[i]].z;
-      if (d2 > radius_min_ * radius_min_ && d2 < radius_max_ * radius_max_ && d2 > range * range &&
-          d2 <= (range + regions_[j]) * (range + regions_[j])) {
-        indices_array[j].push_back((*pc_indices)[i]);
-        break;
-      }
-      range += regions_[j];
-    }
-  }
-
-  /*** Euclidean clustering ***/
-  float tolerance = 0.0;
-  std::vector<pcl::PointCloud<pcl::PointXYZI>::Ptr,
-              Eigen::aligned_allocator<pcl::PointCloud<pcl::PointXYZI>::Ptr>>
-      clusters;
-  int last_clusters_begin = 0;
-  int last_clusters_end = 0;
-
-  for (int i = 0; i < region_max_; i++) {
-    tolerance += 0.1;
-    if (indices_array[i].size() > cluster_size_min_) {
-      pcl::IndicesPtr indices_array_ptr(new std::vector<int>(indices_array[i]));
-      pcl::search::KdTree<pcl::PointXYZI>::Ptr tree(new pcl::search::KdTree<pcl::PointXYZI>);
-      tree->setInputCloud(pcl_pc_in, indices_array_ptr);
-
-      std::vector<pcl::PointIndices> cluster_indices;
-      pcl::EuclideanClusterExtraction<pcl::PointXYZI> ec;
-      ec.setClusterTolerance(tolerance);
-      ec.setMinClusterSize(cluster_size_min_);
-      ec.setMaxClusterSize(cluster_size_max_);
-      ec.setSearchMethod(tree);
-      ec.setInputCloud(pcl_pc_in);
-      ec.setIndices(indices_array_ptr);
-      ec.extract(cluster_indices);
-
-      for (std::vector<pcl::PointIndices>::const_iterator it = cluster_indices.begin();
-           it != cluster_indices.end(); it++) {
-        pcl::PointCloud<pcl::PointXYZI>::Ptr cluster(new pcl::PointCloud<pcl::PointXYZI>);
-        for (std::vector<int>::const_iterator pit = it->indices.begin(); pit != it->indices.end();
-             ++pit) {
-          cluster->points.push_back(pcl_pc_in->points[*pit]);
         }
 
-        /*** Merge clusters separated by nested regions ***/
-        for (int j = last_clusters_begin; j < last_clusters_end; j++) {
-          pcl::KdTreeFLANN<pcl::PointXYZI> kdtree;
-          int K = 1;  // the number of neighbors to search for
-          std::vector<int> k_indices(K);
-          std::vector<float> k_sqr_distances(K);
-          kdtree.setInputCloud(cluster);
-          if (clusters[j]->points.size() >= 1) {
-            if (kdtree.nearestKSearch(*clusters[j], clusters[j]->points.size() - 1, K, k_indices,
-                                      k_sqr_distances) > 0) {
-              if (k_sqr_distances[0] < k_merging_threshold_) {
-                *cluster += *clusters[j].get();
-                clusters.erase(clusters.begin() + j);
-                last_clusters_end--;
-                // std::cerr << "k-merging: clusters " << j << " is merged" << std::endl;
-              }
+      }
+      return true;
+    }
+
+
+    void pointCloudCallback(const sensor_msgs::msg::PointCloud2::SharedPtr ros_pc2_in) const 
+    {
+      // Retrieve parameters for "on the run" tuning:
+      sensor_model = this->get_parameter("sensor_model").get_parameter_value().get<std::string>();
+      print_fps_ = this->get_parameter("print_fps").get_parameter_value().get<bool>();
+      z_axis_min_ = this->get_parameter("z_axis_min").get_parameter_value().get<float>();
+      z_axis_max_ = this->get_parameter("z_axis_max").get_parameter_value().get<float>();
+      cluster_size_min_ = this->get_parameter("cluster_size_min").get_parameter_value().get<int>();
+      cluster_size_max_ = this->get_parameter("cluster_size_max").get_parameter_value().get<int>();
+      leaf_ = this->get_parameter("leaf").get_parameter_value().get<int>();
+      k_merging_threshold_ = this->get_parameter("k_merging_threshold").get_parameter_value().get<float>();
+      z_merging_threshold_ = this->get_parameter("z_merging_threshold").get_parameter_value().get<float>();
+      radius_min_ = this->get_parameter("radius_min").get_parameter_value().get<float>();
+      radius_max_ = this->get_parameter("radius_max").get_parameter_value().get<float>();
+      
+      if(print_fps_ && reset){frames=0; start_time=clock(); reset=false;}//fps
+      
+      /*** Convert ROS message to PCL ***/
+      pcl::PointCloud<pcl::PointXYZ>::Ptr pcl_pc_in(new pcl::PointCloud<pcl::PointXYZ>);
+      pcl::fromROSMsg(*ros_pc2_in, *pcl_pc_in);
+
+      
+
+      pcl::IndicesPtr pc_indices(new std::vector<int>);
+      for(unsigned int i = 0; i < pcl_pc_in->size(); ++i) {
+        pc_indices->push_back(i);
+      }
+
+
+      /*** Divide the point cloud into nested circular regions ***/
+      boost::array<std::vector<int>, 5> indices_array;
+      for(unsigned int i = 0; i < pc_indices->size(); i++) {
+        float range = 0.0;
+        for(int j = 0; j < region_max_; j++) {
+          float d2 = pcl_pc_in->points[(*pc_indices)[i]].x * pcl_pc_in->points[(*pc_indices)[i]].x +
+      pcl_pc_in->points[(*pc_indices)[i]].y * pcl_pc_in->points[(*pc_indices)[i]].y +
+      pcl_pc_in->points[(*pc_indices)[i]].z * pcl_pc_in->points[(*pc_indices)[i]].z;
+          if(d2 > radius_min_ * radius_min_ && d2 < radius_max_ * radius_max_ &&
+      d2 > range * range && d2 <= (range+regions_[j]) * (range+regions_[j])) {
+            indices_array[j].push_back((*pc_indices)[i]);
+            break;
+          }
+          range += regions_[j];
+        }
+      }
+      
+      /*** Euclidean clustering ***/
+      float tolerance = 2.0; // TODO: Retrieve this from param file
+      std::vector<pcl::PointCloud<pcl::PointXYZ>::Ptr, Eigen::aligned_allocator<pcl::PointCloud<pcl::PointXYZ>::Ptr > > clusters;
+      int last_clusters_begin = 0;
+      int last_clusters_end = 0;
+
+      auto pre_time = rclcpp::Clock{}.now();
+      //auto current_time = clock->now();
+
+      //RCLCPP_INFO(this->get_logger(), "Current time: %ld.%09ld", current_time.seconds(), current_time.nanoseconds());
+      
+      for(int i = 0; i < region_max_; i++) {
+        tolerance += 3*0.1;
+        if(indices_array[i].size() > cluster_size_min_) {
+          boost::shared_ptr<std::vector<int> > indices_array_ptr(new std::vector<int>(indices_array[i]));
+          pcl::search::KdTree<pcl::PointXYZ>::Ptr tree(new pcl::search::KdTree<pcl::PointXYZ>);
+          tree->setInputCloud(pcl_pc_in, indices_array_ptr);
+          
+          std::vector<pcl::PointIndices> cluster_indices;
+          pcl::EuclideanClusterExtraction<pcl::PointXYZ> ec;
+          ec.setClusterTolerance(tolerance);
+          ec.setMinClusterSize(cluster_size_min_);
+          ec.setMaxClusterSize(cluster_size_max_);
+          ec.setSearchMethod(tree);
+          ec.setInputCloud(pcl_pc_in);
+          ec.setIndices(indices_array_ptr);
+          ec.extract(cluster_indices);
+          
+          for(std::vector<pcl::PointIndices>::const_iterator it = cluster_indices.begin(); it != cluster_indices.end(); it++) {
+            pcl::PointCloud<pcl::PointXYZ>::Ptr cluster(new pcl::PointCloud<pcl::PointXYZ>);
+            for(std::vector<int>::const_iterator pit = it->indices.begin(); pit != it->indices.end(); ++pit) {
+              cluster->points.push_back(pcl_pc_in->points[*pit]);
+      }
+      /*** Merge clusters separated by nested regions ***/
+      for(int j = last_clusters_begin; j < last_clusters_end; j++) {
+        pcl::KdTreeFLANN<pcl::PointXYZ> kdtree;
+        int K = 1; //the number of neighbors to search for
+        std::vector<int> k_indices(K);
+        std::vector<float> k_sqr_distances(K);
+        kdtree.setInputCloud(cluster);
+        if(clusters[j]->points.size() >= 1) {
+          if(kdtree.nearestKSearch(*clusters[j], clusters[j]->points.size()-1, K, k_indices, k_sqr_distances) > 0) {
+            if(k_sqr_distances[0] < k_merging_threshold_) {
+        *cluster += *clusters[j];
+        clusters.erase(clusters.begin()+j);
+        last_clusters_end--;
+        //std::cerr << "k-merging: clusters " << j << " is merged" << std::endl; 
             }
           }
         }
-        /**************************************************/
-
-        cluster->width = cluster->size();
-        cluster->height = 1;
-        cluster->is_dense = true;
-        clusters.push_back(cluster);
       }
-
-      /*** Merge z-axis clusters ***/
-      for (size_t j = last_clusters_end; j < clusters.size(); j++) {
-        Eigen::Vector4f j_min, j_max;
-        pcl::getMinMax3D(*clusters[j], j_min, j_max);
-        for (size_t k = j + 1; k < clusters.size(); k++) {
-          Eigen::Vector4f k_min, k_max;
-          pcl::getMinMax3D(*clusters[k], k_min, k_max);
-          if (std::max(std::min((double)j_max[0], (double)k_max[0]) -
-                           std::max((double)j_min[0], (double)k_min[0]),
-                       0.0) *
-                  std::max(std::min((double)j_max[1], (double)k_max[1]) -
-                               std::max((double)j_min[1], (double)k_min[1]),
-                           0.0) >
-              z_merging_threshold_) {
-            *clusters[j] += *clusters[k];
-            clusters.erase(clusters.begin() + k);
-            // std::cerr << "z-merging: clusters " << k << " is merged into " << j << std::endl;
+      /**************************************************/
+            cluster->width = cluster->size();
+            cluster->height = 1;
+            cluster->is_dense = true;
+      clusters.push_back(cluster);
           }
+          /*** Merge z-axis clusters ***/
+          for(int j = last_clusters_end; j < clusters.size(); j++) {
+            Eigen::Vector4f j_min, j_max;
+            pcl::getMinMax3D(*clusters[j], j_min, j_max);
+            for(int k = j+1; k < clusters.size(); k++) {
+              Eigen::Vector4f k_min, k_max;
+              pcl::getMinMax3D(*clusters[k], k_min, k_max);
+              if(std::max(std::min((double)j_max[0], (double)k_max[0]) - std::max((double)j_min[0], (double)k_min[0]), 0.0) * std::max(std::min((double)j_max[1], (double)k_max[1]) - std::max((double)j_min[1], (double)k_min[1]), 0.0) > z_merging_threshold_) {
+                *clusters[j] += *clusters[k];
+                clusters.erase(clusters.begin()+k);
+                //std::cerr << "z-merging: clusters " << k << " is merged into " << j << std::endl; 
+              }
+            }
+          }
+          /*****************************/
+          last_clusters_begin = last_clusters_end;
+          last_clusters_end = clusters.size();
         }
       }
-      last_clusters_begin = last_clusters_end;
-      last_clusters_end = clusters.size();
-      /*****************************/
+
+      /*** Output ***/
+      
+      //if(cloud_filtered_pub_->get_subscription_count() > 0) {
+      pcl::PointCloud<pcl::PointXYZ>::Ptr pcl_pc_out(new pcl::PointCloud<pcl::PointXYZ>);
+      sensor_msgs::msg::PointCloud2 ros_pc2_out;
+      //pcl::copyPointCloud(*pcl_pc_in, *pc_indices, *pcl_pc_out);
+      pcl::toROSMsg(*pcl_pc_in, ros_pc2_out);
+
+      auto post_time = rclcpp::Clock{}.now();
+
+      auto time_elapsed = post_time.seconds() - pre_time.seconds();
+      // RCLCPP_INFO(this->get_logger(), "Time taken: '%f'", time_elapsed);
+
+      cloud_filtered_pub_->publish(ros_pc2_out);
+      //} 
+      
+
+      blackandgold_msgs::msg::ClusterArray cluster_array;
+      geometry_msgs::msg::PoseArray pose_array;
+      visualization_msgs::msg::MarkerArray marker_array;
+      autoware_auto_perception_msgs::msg::BoundingBoxArray bounding_boxes;
+      autoware_auto_perception_msgs::msg::BoundingBoxArray wall_bounding_boxes;
+      autoware_auto_perception_msgs::msg::BoundingBoxArray vehicle_bounding_boxes;
+      visualization_msgs::msg::MarkerArray bounding_boxes_markers;
+      visualization_msgs::msg::MarkerArray vehicle_markers;
+      
+      for(int i = 0; i < clusters.size(); i++) {
+        //if(cluster_array_pub_->get_subscription_count() > 0) {
+        sensor_msgs::msg::PointCloud2 ros_pc2_out;
+        pcl::toROSMsg(*clusters[i], ros_pc2_out);
+        cluster_array.clusters.push_back(ros_pc2_out);
+        //}
+        
+        //if(pose_array_pub_->get_subscription_count() > 0) {
+
+        Eigen::Vector4f centroid;
+        pcl::compute3DCentroid(*clusters[i], centroid);
+        
+        geometry_msgs::msg::Pose pose;
+        pose.position.x = centroid[0];
+        pose.position.y = centroid[1];
+        pose.position.z = centroid[2];
+        pose.orientation.w = 1;
+        pose_array.poses.push_back(pose);
+        
+        #ifdef LOG
+              Eigen::Vector4f min, max;
+              pcl::getMinMax3D(*clusters[i], min, max);
+              std::cerr << ros_pc2_in->header.seq << " "
+            << ros_pc2_in->header.stamp << " "
+            << min[0] << " "
+            << min[1] << " "
+            << min[2] << " "
+            << max[0] << " "
+            << max[1] << " "
+            << max[2] << " "
+            << std::endl;
+        #endif
+        //}
+
+        if (!generate_bounding_boxes) {         
+          //if(marker_array_pub_->get_subscription_count() > 0) {
+          Eigen::Vector4f min, max;
+          pcl::getMinMax3D(*clusters[i], min, max);
+          
+          visualization_msgs::msg::Marker marker;
+          marker.header = ros_pc2_in->header;
+          marker.ns = "adaptive_clustering";
+          marker.id = i;
+          marker.type = visualization_msgs::msg::Marker::LINE_LIST;
+          
+          geometry_msgs::msg::Point p[24];
+          p[0].x = max[0];  p[0].y = max[1];  p[0].z = max[2];
+          p[1].x = min[0];  p[1].y = max[1];  p[1].z = max[2];
+          p[2].x = max[0];  p[2].y = max[1];  p[2].z = max[2];
+          p[3].x = max[0];  p[3].y = min[1];  p[3].z = max[2];
+          p[4].x = max[0];  p[4].y = max[1];  p[4].z = max[2];
+          p[5].x = max[0];  p[5].y = max[1];  p[5].z = min[2];
+          p[6].x = min[0];  p[6].y = min[1];  p[6].z = min[2];
+          p[7].x = max[0];  p[7].y = min[1];  p[7].z = min[2];
+          p[8].x = min[0];  p[8].y = min[1];  p[8].z = min[2];
+          p[9].x = min[0];  p[9].y = max[1];  p[9].z = min[2];
+          p[10].x = min[0]; p[10].y = min[1]; p[10].z = min[2];
+          p[11].x = min[0]; p[11].y = min[1]; p[11].z = max[2];
+          p[12].x = min[0]; p[12].y = max[1]; p[12].z = max[2];
+          p[13].x = min[0]; p[13].y = max[1]; p[13].z = min[2];
+          p[14].x = min[0]; p[14].y = max[1]; p[14].z = max[2];
+          p[15].x = min[0]; p[15].y = min[1]; p[15].z = max[2];
+          p[16].x = max[0]; p[16].y = min[1]; p[16].z = max[2];
+          p[17].x = max[0]; p[17].y = min[1]; p[17].z = min[2];
+          p[18].x = max[0]; p[18].y = min[1]; p[18].z = max[2];
+          p[19].x = min[0]; p[19].y = min[1]; p[19].z = max[2];
+          p[20].x = max[0]; p[20].y = max[1]; p[20].z = min[2];
+          p[21].x = min[0]; p[21].y = max[1]; p[21].z = min[2];
+          p[22].x = max[0]; p[22].y = max[1]; p[22].z = min[2];
+          p[23].x = max[0]; p[23].y = min[1]; p[23].z = min[2];
+
+          for(int i = 0; i < 24; i++) {
+            marker.points.push_back(p[i]);
+          }
+          
+          marker.scale.x = 0.3;
+          marker.color.a = 1.0;
+          marker.color.r = 0.0;
+          marker.color.g = 1.0;
+          marker.color.b = 0.5;
+          marker.lifetime = rclcpp::Duration(0.1);
+          marker_array.markers.push_back(marker);
+          //}
+
+        }
+
+        else {
+          autoware_auto_perception_msgs::msg::BoundingBox box;
+          box.centroid.x = centroid[0];
+          box.centroid.y = centroid[1];
+          box.centroid.z = centroid[2];
+
+          // FIXME: Add a method to compute the orientation of the bounding box
+          box.orientation.w = 1.0;
+
+          Eigen::Vector4f min, max;
+          pcl::getMinMax3D(*clusters[i], min, max);
+
+          box.size.x = max[0] - min[0];
+          box.size.y = max[1] - min[1];
+          box.size.z = max[2] - min[2];
+
+          bounding_boxes.boxes.push_back(box);
+
+          // deal with markers
+          visualization_msgs::msg::Marker m;
+          m.header = ros_pc2_in->header;
+          m.ns = "bbox";
+          m.id = i;
+          m.type = visualization_msgs::msg::Marker::CUBE;
+          m.action = visualization_msgs::msg::Marker::ADD;
+          m.pose.position.x = box.centroid.x;
+          m.pose.position.y = box.centroid.y;
+          m.pose.position.z = box.centroid.z;
+          m.pose.orientation.x = box.orientation.x;
+          m.pose.orientation.y = box.orientation.y;
+          m.pose.orientation.z = box.orientation.z;
+          m.pose.orientation.w = box.orientation.w;
+
+          m.scale.x = box.size.x;
+          m.scale.y = box.size.y;
+          m.scale.z = box.size.z;
+
+          bool valid = isOutOfBounds_v2(polynomials, box);
+
+          // figure out geometrically if it is a wall
+
+          //if (!valid) 
+          if ((box.size.x * box.size.y * box.size.z >= 30.0) || box.size.x > 7.0 || (box.size.y / box.size.x > 3.0) || !valid)
+          { // If this is true, the box is a wall
+            // marker color
+            m.color.r = 0.0;
+            m.color.g = 0.0;
+            m.color.b = 1.0;
+            m.color.a = 0.75;
+            m.lifetime.sec = 0;
+            m.lifetime.nanosec = 100000000;
+            wall_bounding_boxes.boxes.push_back(box);
+            
+          }
+          else// if (abs(box.centroid.y) < 20.0)
+          { // The box is a vehicle
+            // marker color
+            RCLCPP_DEBUG(this->get_logger(), "Poly size: '%i'", polynomials.polynomials.size());
+            m.color.r = 1.0;
+            m.color.g = 0.0;
+            m.color.b = 0.0;
+            m.color.a = 0.75;
+            m.lifetime.sec = 0;
+            m.lifetime.nanosec = 100000000;
+            vehicle_bounding_boxes.boxes.push_back(box);
+            vehicle_markers.markers.push_back(m);
+          }
+
+
+          bounding_boxes_markers.markers.push_back(m);
+
+        }
+      }
+
+      if(bounding_boxes.boxes.size()) {
+
+        // Deal with headers:
+        bounding_boxes.header = ros_pc2_in->header;
+        bounding_boxes_pub_->publish(bounding_boxes);
+        vehicle_bounding_boxes.header = ros_pc2_in->header;
+        wall_bounding_boxes.header = ros_pc2_in->header;
+        marker_array_pub_->publish(bounding_boxes_markers);
+
+        marker_array_pub_->publish(bounding_boxes_markers);
+        wall_boxes_pub_->publish(wall_bounding_boxes);
+        vehicle_boxes_pub_->publish(vehicle_bounding_boxes);
+        vehicle_marker_array_pub_->publish(vehicle_markers);
+      }
+      
+      if(cluster_array.clusters.size()) {
+        cluster_array.header = ros_pc2_in->header;
+        cluster_array_pub_->publish(cluster_array);
+      }
+
+      if(pose_array.poses.size()) {
+        pose_array.header = ros_pc2_in->header;
+        pose_array_pub_->publish(pose_array);
+      }
+      
+      if(marker_array.markers.size()) {
+        marker_array_pub_->publish(marker_array);
+      }
+      
+      if(print_fps_)if(++frames>10){std::cerr<<"[adaptive_clustering] fps = "<<float(frames)/(float(clock()-start_time)/CLOCKS_PER_SEC)<<", timestamp = "<<clock()/CLOCKS_PER_SEC<<std::endl;reset = true;};//fps
     }
-  }
 
-  /* Post-process the clusters -- distinguish between obstacles and walls */
-  std::vector<bool> isWall(clusters.size());
-  std::vector<std::vector<float>> min_max_coords(clusters.size());
-  std::vector<std::vector<float>> centroid_coords(clusters.size());
-  std::vector<std::vector<float>> box_sizes(clusters.size());
-  // TODO: use std::transform instead.
-  for (size_t i = 0; i < clusters.size(); i++) {
-    Eigen::Vector4f centroid;
-    pcl::compute3DCentroid(*clusters[i], centroid);
-    // FIXME: Add a method to compute the orientation of the bounding box
-    // FIXME: the quaternion (orientation of the box) should replace [0., 0., 0., 1.].
-    centroid_coords[i] = {centroid[0], centroid[1], centroid[2], 0., 0., 0., 1.};
+    /*** Parameters ***/
+    mutable std::string sensor_model = "VLP-16";
+    mutable bool print_fps_;
+    mutable float z_axis_min_;
+    mutable float z_axis_max_;
+    mutable int cluster_size_min_;
+    mutable int cluster_size_max_;
+    mutable int leaf_;
+    mutable float k_merging_threshold_;
+    mutable float z_merging_threshold_;
+    mutable float radius_min_;
+    mutable float radius_max_;
 
-    Eigen::Vector4f min_coords, max_coords;
-    pcl::getMinMax3D(*clusters[i], min_coords, max_coords);
-    min_max_coords[i] = {min_coords[0], min_coords[1], min_coords[2],
-                         max_coords[0], max_coords[1], max_coords[2]};
-    box_sizes[i] = {(max_coords[0] - min_coords[0]), (max_coords[1] - min_coords[1]),
-                    (max_coords[2] - min_coords[2])};
-#ifdef LOG
-    std::cerr << ros_pc2_in->header.seq << " " << ros_pc2_in->header.stamp << " " << min_coords[0]
-              << " " << min_coords[1] << " " << min_coords[2] << " " << max_coords[0] << " "
-              << max_coords[1] << " " << max_coords[2] << " " << std::endl;
-#endif
-    float max_box_dim = box_sizes[i][0];
-    float min_box_dim = box_sizes[i][0];
-    for (size_t j = 0; j < 3; j++) {
-      max_box_dim = std::fmax(box_sizes[i][j], max_box_dim);
-      min_box_dim = std::fmin(box_sizes[i][j], min_box_dim);
-    }
-    isWall[i] = (box_sizes[i][0] * box_sizes[i][1] * box_sizes[i][2] >= 30.0) ||
-                (max_box_dim > 10.0 * min_box_dim);
-  }
+    const int region_max_ = 5; // 10 Change this value to match how far you want to detect.
 
-  /*** Output: use lazy publishers ***/
-  if (do_ground_ceiling_rm_) {
-    if (cloud_filtered_pub_->get_subscription_count()) {
-      pcl::PointCloud<pcl::PointXYZI>::Ptr pcl_pc_out(new pcl::PointCloud<pcl::PointXYZI>);
-      std::unique_ptr<PointCloud2> ros_pc2_out(new PointCloud2);
-      pcl::copyPointCloud(*pcl_pc_in, *pc_indices, *pcl_pc_out);
-      pcl::toROSMsg(*pcl_pc_out, *ros_pc2_out.get());
-      cloud_filtered_pub_->publish(std::move(ros_pc2_out));
-    }
-  }
+    int regions_[4];
 
-  if (cluster_array_pub_->get_subscription_count()) {
-    std::unique_ptr<ClusterArray> cluster_array(new ClusterArray);
-    for (size_t i = 0; i < clusters.size(); i++) {
-      PointCloud2 ros_pc2_out;
-      pcl::toROSMsg(*clusters[i], ros_pc2_out);
-      cluster_array->clusters.push_back(ros_pc2_out);
-    }
-    if (cluster_array->clusters.size()) {
-      cluster_array->header = ros_pc2_in->header;
-      cluster_array_pub_->publish(std::move(cluster_array));
-    }
-  }
+    mutable int frames; 
+    mutable clock_t start_time; 
+    mutable bool reset;
 
-  if (pose_array_pub_->get_subscription_count() > 0) {
-    std::unique_ptr<PoseArray> pose_array(new PoseArray);
-    pose_array->poses.resize(clusters.size());
-    std::transform(centroid_coords.begin(), centroid_coords.end(), pose_array->poses.begin(),
-                   [](const std::vector<float> &c) {
-                     geometry_msgs::msg::Pose pose;
-                     pose.position.x = c[0];
-                     pose.position.y = c[1];
-                     pose.position.z = c[2];
-                     pose.orientation.x = c[3];
-                     pose.orientation.y = c[4];
-                     pose.orientation.z = c[5];
-                     pose.orientation.w = c[6];
-                     return pose;
-                   });
-    pose_array->header = ros_pc2_in->header;
-    pose_array_pub_->publish(std::move(pose_array));
-  }
+    visualization_msgs::msg::MarkerArray boundary_points;
 
-  std::unique_ptr<MarkerArray> marker_array = std::make_unique<MarkerArray>();
-  marker_array->markers.reserve(clusters.size());
-  std::unique_ptr<MarkerArray> obstacle_marker_array = std::make_unique<MarkerArray>();
-  Marker marker;
-  marker.header = ros_pc2_in->header;
-  marker.ns = "adaptive_clustering";
-  marker.type = Marker::CUBE;
-  marker.action = visualization_msgs::msg::Marker::ADD;
-  marker.color.a = 0.3;
-  marker.color.r = 0.0;
-  marker.color.g = 1.0;
-  marker.color.b = 0.5;
-  marker.lifetime = rclcpp::Duration(0.1s);
-  for (size_t i = 0; i < clusters.size(); i++) {
-    marker.id = static_cast<int>(i);
-    marker.pose.position.x = (min_max_coords[i][0] + min_max_coords[i][3]) * 0.5;
-    marker.pose.position.y = (min_max_coords[i][1] + min_max_coords[i][4]) * 0.5;
-    marker.pose.position.z = (min_max_coords[i][2] + min_max_coords[i][5]) * 0.5;
-    marker.pose.orientation.x = centroid_coords[i][3];
-    marker.pose.orientation.y = centroid_coords[i][4];
-    marker.pose.orientation.z = centroid_coords[i][5];
-    marker.pose.orientation.w = centroid_coords[i][6];
-    marker.scale.x = box_sizes[i][0];
-    marker.scale.y = box_sizes[i][1];
-    marker.scale.z = box_sizes[i][2];
-    marker_array->markers.push_back(marker);
-    if (!isWall[i]) {
-      obstacle_marker_array->markers.push_back(marker);
-      // marker color tweaks
-      obstacle_marker_array->markers.back().color.r = 1.0;
-      obstacle_marker_array->markers.back().color.g = 0.0;
-      obstacle_marker_array->markers.back().color.b = 0.0;
-      obstacle_marker_array->markers.back().color.a = 0.75;
-    }
-  }
 
-#ifdef AUTOWARE_AUTO_PERCEPTION_MSGS__MSG__BOUNDING_BOX_HPP_
-  std::unique_ptr<BoundingBoxArray> bounding_boxes(new BoundingBoxArray);
-  std::unique_ptr<BoundingBoxArray> wall_bounding_boxes(new BoundingBoxArray);
-  std::unique_ptr<BoundingBoxArray> obstacle_bounding_boxes(new BoundingBoxArray);
-  bounding_boxes->header = ros_pc2_in->header;
-  wall_bounding_boxes->header = ros_pc2_in->header;
-  obstacle_bounding_boxes->header = ros_pc2_in->header;
-  autoware_auto_perception_msgs::msg::BoundingBox box;
-  for (size_t i = 0; i < clusters.size(); i++) {
-    box.centroid.x = marker_array->markers[i].pose.position.x;
-    box.centroid.y = marker_array->markers[i].pose.position.y;
-    box.centroid.z = marker_array->markers[i].pose.position.z;
-    box.orientation.x = marker_array->markers[i].pose.orientation.x;
-    box.orientation.y = marker_array->markers[i].pose.orientation.y;
-    box.orientation.z = marker_array->markers[i].pose.orientation.z;
-    box.orientation.w = marker_array->markers[i].pose.orientation.w;
-    box.size.x = marker_array->markers[i].scale.x;
-    box.size.y = marker_array->markers[i].scale.y;
-    box.size.z = marker_array->markers[i].scale.z;
-    bounding_boxes->boxes.push_back(box);
-    // figure out geometrically if it is a wall
-    if (isWall[i]) {
-      wall_bounding_boxes->boxes.push_back(box);
-    } else {
-      obstacle_bounding_boxes->boxes.push_back(box);
-    }
-  }
-  bounding_boxes_pub_->publish(std::move(bounding_boxes));
-  wall_boxes_pub_->publish(std::move(wall_bounding_boxes));
-  obstacle_boxes_pub_->publish(std::move(obstacle_bounding_boxes));
-#endif
+    bool generate_bounding_boxes;
+    mutable blackandgold_msgs::msg::Polynomial4Array polynomials;
+    rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr cloud_filtered_pub_;
+    rclcpp::Publisher<blackandgold_msgs::msg::ClusterArray>::SharedPtr cluster_array_pub_;
+    rclcpp::Publisher<geometry_msgs::msg::PoseArray>::SharedPtr pose_array_pub_;
+    rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr marker_array_pub_;
+    rclcpp::Publisher<autoware_auto_perception_msgs::msg::BoundingBoxArray>::SharedPtr bounding_boxes_pub_;
+    rclcpp::Publisher<autoware_auto_perception_msgs::msg::BoundingBoxArray>::SharedPtr vehicle_boxes_pub_;
+    rclcpp::Publisher<autoware_auto_perception_msgs::msg::BoundingBoxArray>::SharedPtr wall_boxes_pub_;
+    rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr vehicle_marker_array_pub_;
 
-  marker_array_pub_->publish(std::move(marker_array));
-  obstacle_marker_array_pub_->publish(std::move(obstacle_marker_array));
+    rclcpp::Subscription<sensor_msgs::msg::PointCloud2>::SharedPtr point_cloud_sub;
+    //rclcpp::Subscription<visualization_msgs::msg::MarkerArray>::SharedPtr wall_points_sub;
 
-  if (print_fps_) {
-    if (++frames > 10) {
-      std::cerr << "[adaptive_clustering] fps = "
-                << float(frames) / (this->now() - start_time).seconds()
-                << ", timestamp = " << this->now().seconds() << std::endl;
-      reset = true;
-    }  // fps
-  }
-}
+};
 
-int main(int argc, char **argv) {
+
+int main(int argc, char * argv[]) {
   rclcpp::init(argc, argv);
   rclcpp::spin(std::make_shared<AdaptiveClustering>());
   rclcpp::shutdown();

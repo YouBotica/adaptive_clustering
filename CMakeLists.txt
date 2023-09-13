@@ -58,6 +58,10 @@ ament_auto_add_executable(${PROJECT_NAME}_node
   src/adaptive_clustering.cpp
 )
 
+#ament_auto_add_executable(${PROJECT_NAME}_node
+#  src/adaptive_clustering.cpp
+#)
+
 target_link_libraries(${PROJECT_NAME}_node "${cpp_typesupport_target}")
 
 # export information to downstream packages
