@@ -184,7 +184,7 @@ class AdaptiveClustering : public rclcpp::Node {
 
 
       /*** Divide the point cloud into nested circular regions ***/
-      boost::array<std::vector<int>, 5> indices_array;
+      std::array<std::vector<int>, 5> indices_array;
       for(unsigned int i = 0; i < pc_indices->size(); i++) {
         float range = 0.0;
         for(int j = 0; j < region_max_; j++) {
@@ -214,7 +214,7 @@ class AdaptiveClustering : public rclcpp::Node {
       for(int i = 0; i < region_max_; i++) {
         tolerance += 3*0.1;
         if(indices_array[i].size() > cluster_size_min_) {
-          boost::shared_ptr<std::vector<int> > indices_array_ptr(new std::vector<int>(indices_array[i]));
+          std::shared_ptr<std::vector<int> > indices_array_ptr(new std::vector<int>(indices_array[i]));
           pcl::search::KdTree<pcl::PointXYZ>::Ptr tree(new pcl::search::KdTree<pcl::PointXYZ>);
           tree->setInputCloud(pcl_pc_in, indices_array_ptr);
           
@@ -383,7 +383,7 @@ class AdaptiveClustering : public rclcpp::Node {
           marker.color.r = 0.0;
           marker.color.g = 1.0;
           marker.color.b = 0.5;
-          marker.lifetime = rclcpp::Duration(0.1);
+          marker.lifetime = rclcpp::Duration(0.1s);
           marker_array.markers.push_back(marker);
           //}
 
