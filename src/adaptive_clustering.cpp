@@ -28,6 +28,7 @@
 #include <visualization_msgs/msg/marker.hpp>
 
 // PCL
+#include "pcl/pcl_config.h"
 #include "pcl_conversions/pcl_conversions.h"
 #include "pcl/filters/voxel_grid.h" 
 #include "pcl/filters/passthrough.h" 
@@ -184,7 +185,12 @@ class AdaptiveClustering : public rclcpp::Node {
 
 
       /*** Divide the point cloud into nested circular regions ***/
-      std::array<std::vector<int>, 5> indices_array;
+      #if PCL_VERSION_COMPARE(<, 1, 11, 0)
+        boost::array<std::vector<int>, 5> indices_array;
+      #else
+        std::array<std::vector<int>, 5> indices_array;
+      #endif
+
       for(unsigned int i = 0; i < pc_indices->size(); i++) {
         float range = 0.0;
         for(int j = 0; j < region_max_; j++) {
@@ -214,7 +220,11 @@ class AdaptiveClustering : public rclcpp::Node {
       for(int i = 0; i < region_max_; i++) {
         tolerance += 3*0.1;
         if(indices_array[i].size() > cluster_size_min_) {
-          std::shared_ptr<std::vector<int> > indices_array_ptr(new std::vector<int>(indices_array[i]));
+          #if PCL_VERSION_COMPARE(<, 1, 11, 0)
+            boost::shared_ptr<std::vector<int> > indices_array_ptr(new std::vector<int>(indices_array[i]));
+          #else
+            std::shared_ptr<std::vector<int> > indices_array_ptr(new std::vector<int>(indices_array[i]));
+          #endif
           pcl::search::KdTree<pcl::PointXYZ>::Ptr tree(new pcl::search::KdTree<pcl::PointXYZ>);
           tree->setInputCloud(pcl_pc_in, indices_array_ptr);
           
@@ -383,7 +393,12 @@ class AdaptiveClustering : public rclcpp::Node {
           marker.color.r = 0.0;
           marker.color.g = 1.0;
           marker.color.b = 0.5;
-          marker.lifetime = rclcpp::Duration(0.1s);
+          
+          #if PCL_VERSION_COMPARE(<, 1, 11, 0)
+            marker.lifetime = rclcpp::Duration(0.1);
+          #else
+            marker.lifetime = rclcpp::Duration(0.1s);
+          #endif
           marker_array.markers.push_back(marker);
           //}
 
