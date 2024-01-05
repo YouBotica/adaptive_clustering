@@ -72,6 +72,8 @@ class AdaptiveClustering : public rclcpp::Node {
     this->declare_parameter<float>("radius_max", 120.0);
     // Whether we want to output bounding boxes, or the original algorithm line markers
     this->declare_parameter<bool>("generate_bounding_boxes", true);
+    this->declare_parameter<float>("car_width",2.0);
+    this->declare_parameter<float>("car_length",4.8768);
 
 
     sensor_model = this->get_parameter("sensor_model").get_parameter_value().get<std::string>();
@@ -86,6 +88,8 @@ class AdaptiveClustering : public rclcpp::Node {
     radius_min_ = this->get_parameter("radius_min").get_parameter_value().get<float>();
     radius_max_ = this->get_parameter("radius_max").get_parameter_value().get<float>();
     generate_bounding_boxes = this->get_parameter("generate_bounding_boxes").get_parameter_value().get<bool>();
+    car_width_ = this->get_parameter("car_width").get_parameter_value().get<float>();
+    car_length_ = this->get_parameter("car_length").get_parameter_value().get<float>();
 
     /*** Subscribers ***/
     point_cloud_sub = this->create_subscription<sensor_msgs::msg::PointCloud2>("/perception/points_nonground", 10, std::bind(&AdaptiveClustering::pointCloudCallback, 
@@ -324,6 +328,11 @@ class AdaptiveClustering : public rclcpp::Node {
 
         Eigen::Vector4f centroid;
         pcl::compute3DCentroid(*clusters[i], centroid);
+
+        // filter out the detection of ourselves
+        if (fabs(centroid[x]) <= car_length_/2 && fabs(centroid[1]) <= car_width_/2) {
+          continue;
+        }
         
         geometry_msgs::msg::Pose pose;
         pose.position.x = centroid[0];
@@ -446,6 +455,7 @@ class AdaptiveClustering : public rclcpp::Node {
           // figure out geometrically if it is a wall
 
           //if (!valid) 
+          // NOTE May not need this with the addition of the off-map filter (CarProximityReporter)
           if ((box.size.x * box.size.y * box.size.z >= 30.0) || box.size.x > 7.0 || (box.size.y / box.size.x > 3.0) || !valid)
           { // If this is true, the box is a wall
             // marker color
@@ -522,6 +532,8 @@ class AdaptiveClustering : public rclcpp::Node {
     mutable float z_merging_threshold_;
     mutable float radius_min_;
     mutable float radius_max_;
+    mutable float car_width_;
+    mutable float car_length_;
 
     const int region_max_ = 5; // 10 Change this value to match how far you want to detect.
 

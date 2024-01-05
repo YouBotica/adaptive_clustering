@@ -12,3 +12,5 @@
     z_axis_max: 10.0
     z_axis_min: -0.800000011920929
     z_merging_threshold: 0.0
+    car_width: 2.0
+    car_length: 4.8768
