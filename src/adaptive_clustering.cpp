@@ -330,7 +330,7 @@ class AdaptiveClustering : public rclcpp::Node {
         pcl::compute3DCentroid(*clusters[i], centroid);
 
         // filter out the detection of ourselves
-        if (fabs(centroid[x]) <= car_length_/2 && fabs(centroid[1]) <= car_width_/2) {
+        if (fabs(centroid[0]) <= car_length_/2 && fabs(centroid[1]) <= car_width_/2) {
           continue;
         }
         
