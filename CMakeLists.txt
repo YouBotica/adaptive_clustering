@@ -66,7 +66,6 @@ target_link_libraries(${PROJECT_NAME}_node "${cpp_typesupport_target}")
 
 # export information to downstream packages
 ament_auto_package(
-  CONFIG_EXTRAS "${PROJECT_NAME}-extras.cmake"
   INSTALL_TO_SHARE param
 )
 
