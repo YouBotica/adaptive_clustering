@@ -2,6 +2,9 @@
   ros__parameters:
     cluster_size_max: 500
     cluster_size_min: 15
+    clustering_tolerance: 2.0
+    clustering_x_tolerance: 1.5
+    clustering_y_tolerance: 1.5
     generate_bounding_boxes: true
     k_merging_threshold: 0.10000000149011612
     leaf: 1
