@@ -109,10 +109,10 @@ class AdaptiveClustering : public rclcpp::Node {
     //marker_array_pub_ = private_nh.advertise<visualization_msgs::MarkerArray>("markers", 100);
     marker_array_pub_ = this->create_publisher<visualization_msgs::msg::MarkerArray>("clustering_markers", 10);
 
-    bounding_boxes_pub_ = this->create_publisher<autoware_auto_perception_msgs::msg::BoundingBoxArray>("/perception/lidar_bboxes", 10);
-    vehicle_boxes_pub_ = this->create_publisher<autoware_auto_perception_msgs::msg::BoundingBoxArray>("/perception/lidar_vehicle_bboxes", 10);
-    wall_boxes_pub_ = this->create_publisher<autoware_auto_perception_msgs::msg::BoundingBoxArray>("/perception/lidar_wall_bboxes", 10);
-    vehicle_marker_array_pub_ = this->create_publisher<visualization_msgs::msg::MarkerArray>("/perception/vehicle_lidar_markers", 10);
+    bounding_boxes_pub_ = this->create_publisher<autoware_auto_perception_msgs::msg::BoundingBoxArray>("lidar_bboxes", 10);
+    vehicle_boxes_pub_ = this->create_publisher<autoware_auto_perception_msgs::msg::BoundingBoxArray>("lidar_vehicle_bboxes", 10);
+    wall_boxes_pub_ = this->create_publisher<autoware_auto_perception_msgs::msg::BoundingBoxArray>("lidar_wall_bboxes", 10);
+    vehicle_marker_array_pub_ = this->create_publisher<visualization_msgs::msg::MarkerArray>("vehicle_lidar_markers", 10);
 
 
     regions_[0] = 5; regions_[1] = 20; regions_[2] = 30; regions_[3] = 30; regions_[4] = 30; // FIXME: Add these to parameter files
