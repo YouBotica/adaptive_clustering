@@ -93,7 +93,7 @@ class AdaptiveClustering : public rclcpp::Node {
     car_length_ = this->get_parameter("car_length").get_parameter_value().get<float>();
 
     /*** Subscribers ***/
-    point_cloud_sub = this->create_subscription<sensor_msgs::msg::PointCloud2>("/perception/linefit_seg/ransac_non_ground", 10, std::bind(&AdaptiveClustering::pointCloudCallback, 
+    point_cloud_sub = this->create_subscription<sensor_msgs::msg::PointCloud2>("/perception/post/linefit_seg/ransac_non_ground", 10, std::bind(&AdaptiveClustering::pointCloudCallback, 
       this, std::placeholders::_1));
     //wall_points_sub = this->create_subscription<blackandgold_msgs::msg::Polynomial4Array>("/perception/wall_point_markers", 10, std::bind(&AdaptiveClustering::wallsCallback, 
     //  this, std::placeholders::_1));
