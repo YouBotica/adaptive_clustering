@@ -44,7 +44,6 @@ public:
         this->declare_parameter<bool>("generate_bounding_boxes", true);
         this->declare_parameter<float>("car_width", 2.0);
         this->declare_parameter<float>("car_length", 4.8768);
-        this->declare_parameter<float>("");
 
         // Get parameter values
         sensor_model_ = this->get_parameter("sensor_model").get_parameter_value().get<std::string>();
