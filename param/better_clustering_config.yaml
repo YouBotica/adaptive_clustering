@@ -1,4 +1,4 @@
-/adaptive_clustering:
+/*/*/adaptive_clustering:
   ros__parameters:
     cluster_size_max: 500
     cluster_size_min: 15
