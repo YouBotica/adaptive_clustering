@@ -161,7 +161,6 @@ class AdaptiveClustering : public rclcpp::Node {
 
     void pointCloudCallback(const sensor_msgs::msg::PointCloud2::SharedPtr ros_pc2_in) const 
     {
-      RCLCPP_INFO(this->get_logger(), "PointCloud2 received");
       // Retrieve parameters for "on the run" tuning:
       sensor_model = this->get_parameter("sensor_model").get_parameter_value().get<std::string>();
       print_fps_ = this->get_parameter("print_fps").get_parameter_value().get<bool>();
