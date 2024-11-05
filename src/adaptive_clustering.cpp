@@ -93,7 +93,7 @@ class AdaptiveClustering : public rclcpp::Node {
     car_length_ = this->get_parameter("car_length").get_parameter_value().get<float>();
 
     /*** Subscribers ***/
-    point_cloud_sub = this->create_subscription<sensor_msgs::msg::PointCloud2>("/perception/linefit_seg/ransac_non_ground", 10, std::bind(&AdaptiveClustering::pointCloudCallback, 
+    point_cloud_sub = this->create_subscription<sensor_msgs::msg::PointCloud2>("ransac_non_ground", 10, std::bind(&AdaptiveClustering::pointCloudCallback, 
       this, std::placeholders::_1));
     //wall_points_sub = this->create_subscription<blackandgold_msgs::msg::Polynomial4Array>("/perception/wall_point_markers", 10, std::bind(&AdaptiveClustering::wallsCallback, 
     //  this, std::placeholders::_1));
@@ -161,6 +161,7 @@ class AdaptiveClustering : public rclcpp::Node {
 
     void pointCloudCallback(const sensor_msgs::msg::PointCloud2::SharedPtr ros_pc2_in) const 
     {
+      RCLCPP_INFO(this->get_logger(), "PointCloud2 received");
       // Retrieve parameters for "on the run" tuning:
       sensor_model = this->get_parameter("sensor_model").get_parameter_value().get<std::string>();
       print_fps_ = this->get_parameter("print_fps").get_parameter_value().get<bool>();
@@ -274,7 +275,7 @@ class AdaptiveClustering : public rclcpp::Node {
             cluster->width = cluster->size();
             cluster->height = 1;
             cluster->is_dense = true;
-      clusters.push_back(cluster);
+            clusters.push_back(cluster);
           }
           /*** Merge z-axis clusters ***/
           for(int j = last_clusters_end; j < clusters.size(); j++) {
