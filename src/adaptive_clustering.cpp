@@ -265,7 +265,7 @@ class AdaptiveClustering : public rclcpp::Node {
         *cluster += *clusters[j];
         clusters.erase(clusters.begin()+j);
         last_clusters_end--;
-        //std::cerr << "k-merging: clusters " << j << " is merged" << std::endl; 
+        std::cerr << "k-merging: clusters " << j << " is merged" << std::endl; 
             }
           }
         }
@@ -408,7 +408,7 @@ class AdaptiveClustering : public rclcpp::Node {
 
         //if (!valid) 
         // NOTE May not need this with the addition of the off-map filter (CarProximityReporter)
-        if ((box.size.x * box.size.y * box.size.z >= 30.0) || box.size.x > 7.0 || (box.size.y / box.size.x > 3.0) || !valid)
+        if ((box.size.x * box.size.y * box.size.z >= 25.0) || box.size.x > 6.0 || (box.size.y / box.size.x > 1.0) || !valid)
         { // If this is true, the box is a wall
           // marker color
           m.color.r = 0.0;
