@@ -75,6 +75,12 @@ class AdaptiveClustering : public rclcpp::Node {
     this->declare_parameter<bool>("generate_bounding_boxes", true);
     this->declare_parameter<float>("car_width",2.0);
     this->declare_parameter<float>("car_length",4.8768);
+    // get regions from param
+    std::vector<int64_t> default_regions = {5, 20, 30, 30, 30}; // Default values for regions
+    this->declare_parameter<std::vector<int64_t>>("regions", default_regions);
+    // get tolerance from param
+    this->declare_parameter<float>("tolerance",2.0);
+
 
 
     sensor_model = this->get_parameter("sensor_model").get_parameter_value().get<std::string>();
@@ -91,6 +97,8 @@ class AdaptiveClustering : public rclcpp::Node {
     generate_bounding_boxes = this->get_parameter("generate_bounding_boxes").get_parameter_value().get<bool>();
     car_width_ = this->get_parameter("car_width").get_parameter_value().get<float>();
     car_length_ = this->get_parameter("car_length").get_parameter_value().get<float>();
+    regions_ = this->get_parameter("regions").get_parameter_value().get<std::vector<int64_t>>();
+    tolerance_ = this->get_parameter("tolerance").get_parameter_value().get<float>();
 
     /*** Subscribers ***/
     point_cloud_sub = this->create_subscription<sensor_msgs::msg::PointCloud2>("ransac_non_ground", 10, std::bind(&AdaptiveClustering::pointCloudCallback, 
@@ -114,8 +122,6 @@ class AdaptiveClustering : public rclcpp::Node {
     wall_boxes_pub_ = this->create_publisher<autoware_auto_perception_msgs::msg::BoundingBoxArray>("lidar_wall_bboxes", 10);
     vehicle_marker_array_pub_ = this->create_publisher<visualization_msgs::msg::MarkerArray>("vehicle_lidar_markers", 10);
 
-
-    regions_[0] = 5; regions_[1] = 20; regions_[2] = 30; regions_[3] = 30; regions_[4] = 30; // FIXME: Add these to parameter files
 
     reset = true;//fps
     frames = 0;
@@ -173,6 +179,9 @@ class AdaptiveClustering : public rclcpp::Node {
       z_merging_threshold_ = this->get_parameter("z_merging_threshold").get_parameter_value().get<float>();
       radius_min_ = this->get_parameter("radius_min").get_parameter_value().get<float>();
       radius_max_ = this->get_parameter("radius_max").get_parameter_value().get<float>();
+      regions_ = this->get_parameter("regions").get_parameter_value().get<std::vector<int64_t>>();
+      tolerance_ = this->get_parameter("tolerance").get_parameter_value().get<float>();
+
       
       if(print_fps_ && reset){frames=0; start_time=clock(); reset=false;}//fps
       
@@ -211,7 +220,7 @@ class AdaptiveClustering : public rclcpp::Node {
       }
       
       /*** Euclidean clustering ***/
-      float tolerance = 2.0; // TODO: Retrieve this from param file
+      //float tolerance = 2.0; // TODO: Retrieve this from param file
       std::vector<pcl::PointCloud<pcl::PointXYZ>::Ptr, Eigen::aligned_allocator<pcl::PointCloud<pcl::PointXYZ>::Ptr > > clusters;
       int last_clusters_begin = 0;
       int last_clusters_end = 0;
@@ -222,7 +231,7 @@ class AdaptiveClustering : public rclcpp::Node {
       //RCLCPP_INFO(this->get_logger(), "Current time: %ld.%09ld", current_time.seconds(), current_time.nanoseconds());
       
       for(int i = 0; i < region_max_; i++) {
-        tolerance += 0.0; //3*0.1;
+        tolerance_ += 0.0; //3*0.1;
         if(indices_array[i].size() > cluster_size_min_) {
           #if PCL_VERSION_COMPARE(<, 1, 11, 0)
             boost::shared_ptr<std::vector<int> > indices_array_ptr(new std::vector<int>(indices_array[i]));
@@ -235,7 +244,7 @@ class AdaptiveClustering : public rclcpp::Node {
 
             std::vector<pcl::PointIndices> cluster_indices;
             pcl::EuclideanClusterExtraction<pcl::PointXYZ> ec;
-            ec.setClusterTolerance(tolerance);
+            ec.setClusterTolerance(tolerance_);
             ec.setMinClusterSize(cluster_size_min_);
             ec.setMaxClusterSize(cluster_size_max_);
             ec.setSearchMethod(tree);
@@ -265,7 +274,7 @@ class AdaptiveClustering : public rclcpp::Node {
         *cluster += *clusters[j];
         clusters.erase(clusters.begin()+j);
         last_clusters_end--;
-        std::cerr << "k-merging: clusters " << j << " is merged" << std::endl; 
+        // std::cerr << "k-merging: clusters " << j << " is merged" << std::endl; 
             }
           }
         }
@@ -408,8 +417,8 @@ class AdaptiveClustering : public rclcpp::Node {
 
         //if (!valid) 
         // NOTE May not need this with the addition of the off-map filter (CarProximityReporter)
-        if ((box.size.x * box.size.y * box.size.z >= 25.0) || box.size.x > 6.0 || (box.size.y / box.size.x > 1.0) || !valid)
-        { // If this is true, the box is a wall
+        if ((box.size.x * box.size.y * box.size.z >= 12.0) || box.size.x > 6.0 || (box.size.y / box.size.x > 1.0) || !valid)
+        { // If this is true, the box is bigger than the car
           // marker color
           m.color.r = 0.0;
           m.color.g = 0.0;
@@ -485,10 +494,10 @@ class AdaptiveClustering : public rclcpp::Node {
     mutable float radius_max_;
     mutable float car_width_;
     mutable float car_length_;
+    mutable std::vector<int64_t> regions_;
+    mutable float tolerance_;
 
     const int region_max_ = 5; // 10 Change this value to match how far you want to detect.
-
-    int regions_[4];
 
     mutable int frames; 
     mutable clock_t start_time; 
