@@ -58,11 +58,29 @@ ament_auto_add_executable(${PROJECT_NAME}_node
   src/adaptive_clustering.cpp
 )
 
+ament_auto_add_library(${PROJECT_NAME}_components SHARED
+  src/adaptive_clustering_component.cpp
+)
+
+rclcpp_components_register_node(
+    ${PROJECT_NAME}_components
+    PLUGIN "lidar_processing::AdaptiveClustering"
+    EXECUTABLE adaptive_clustering_component
+)
+
 #ament_auto_add_executable(${PROJECT_NAME}_node
 #  src/adaptive_clustering.cpp
 #)
 
 target_link_libraries(${PROJECT_NAME}_node "${cpp_typesupport_target}")
+
+ament_export_targets(export_${PROJECT_NAME}_components)
+install(TARGETS ${PROJECT_NAME}_components
+        EXPORT export_${PROJECT_NAME}_components
+        ARCHIVE DESTINATION lib
+        LIBRARY DESTINATION lib
+        RUNTIME DESTINATION bin
+)
 
 # export information to downstream packages
 ament_auto_package(

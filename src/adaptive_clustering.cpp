@@ -108,12 +108,6 @@ class AdaptiveClustering : public rclcpp::Node {
     //ros::Subscriber point_cloud_sub = nh.subscribe<sensor_msgs::PointCloud2>("velodyne_points", 1, pointCloudCallback);
 
     /*** Publishers ***/
-    //cluster_array_pub_ = private_nh.advertise<adaptive_clustering::ClusterArray>("clusters", 100);
-    cluster_array_pub_ = this->create_publisher<blackandgold_msgs::msg::ClusterArray>("clusters", 10);
-    //cloud_filtered_pub_ = private_nh.advertise<sensor_msgs::PointCloud2>("cloud_filtered", 100);
-    cloud_filtered_pub_ = this->create_publisher<sensor_msgs::msg::PointCloud2>("cloud_filtered", 10);
-    //pose_array_pub_ = private_nh.advertise<geometry_msgs::PoseArray>("poses", 100);
-    pose_array_pub_ = this->create_publisher<geometry_msgs::msg::PoseArray>("poses", 10);
     //marker_array_pub_ = private_nh.advertise<visualization_msgs::MarkerArray>("markers", 100);
     marker_array_pub_ = this->create_publisher<visualization_msgs::msg::MarkerArray>("clustering_markers", 10);
 
@@ -307,7 +301,7 @@ class AdaptiveClustering : public rclcpp::Node {
 
       /*** Output ***/
       
-      //if(cloud_filtered_pub_->get_subscription_count() > 0) {
+
       pcl::PointCloud<pcl::PointXYZ>::Ptr pcl_pc_out(new pcl::PointCloud<pcl::PointXYZ>);
       sensor_msgs::msg::PointCloud2 ros_pc2_out;
       //pcl::copyPointCloud(*pcl_pc_in, *pc_indices, *pcl_pc_out);
@@ -318,7 +312,6 @@ class AdaptiveClustering : public rclcpp::Node {
       auto time_elapsed = post_time.seconds() - pre_time.seconds();
       // RCLCPP_INFO(this->get_logger(), "Time taken: '%f'", time_elapsed);
 
-      cloud_filtered_pub_->publish(ros_pc2_out);
       //} 
       
 
@@ -332,13 +325,7 @@ class AdaptiveClustering : public rclcpp::Node {
       visualization_msgs::msg::MarkerArray vehicle_markers;
       
       for(int i = 0; i < clusters.size(); i++) {
-        //if(cluster_array_pub_->get_subscription_count() > 0) {
-        sensor_msgs::msg::PointCloud2 ros_pc2_out;
-        pcl::toROSMsg(*clusters[i], ros_pc2_out);
-        cluster_array.clusters.push_back(ros_pc2_out);
-        //}
         
-        //if(pose_array_pub_->get_subscription_count() > 0) {
 
         Eigen::Vector4f centroid;
         pcl::compute3DCentroid(*clusters[i], centroid);
@@ -360,35 +347,6 @@ class AdaptiveClustering : public rclcpp::Node {
         box.size.x = max[0] - min[0];
         box.size.y = max[1] - min[1];
         box.size.z = max[2] - min[2];
-        
-        // Compute roll angle of bounding box
-        // float roll = atan2(max[1] - min[1], max[0] - min[0]);
-        
-        // Create quaternion from roll angle
-        // tf2::Quaternion quaternion;
-        // quaternion.setRPY(roll, 0, 0);
-        // geometry_msgs::msg::Quaternion quat_msg;
-        // quat_msg.x = quaternion.x();
-        // quat_msg.y = quaternion.y();
-        // quat_msg.z = quaternion.z();
-        // quat_msg.w = quaternion.w();
-
-        // Print quaternion components:
-        // RCLCPP_INFO(this->get_logger(), "Quat x: '%f'", quat_msg.x);
-
-        // box.orientation.x = quat_msg.x;
-        // box.orientation.y = quat_msg.y;
-        // box.orientation.z = quat_msg.z;
-        // box.orientation.w = quat_msg.w;
-
-        // geometry_msgs::msg::Pose pose;
-        // pose.position.x = centroid[0];
-        // pose.position.y = centroid[1];
-        // pose.position.z = centroid[2];
-        // pose.orientation = quat_msg;
-        // pose_array.poses.push_back(pose);
-
-        // RCLCPP_INFO(this->get_logger(), "Roll: '%f'", roll);
 
         bounding_boxes.boxes.push_back(box);
 
@@ -463,15 +421,6 @@ class AdaptiveClustering : public rclcpp::Node {
         vehicle_marker_array_pub_->publish(vehicle_markers);
       }
       
-      if(cluster_array.clusters.size()) {
-        cluster_array.header = ros_pc2_in->header;
-        cluster_array_pub_->publish(cluster_array);
-      }
-
-      // if(pose_array.poses.size()) {
-      //   pose_array.header = ros_pc2_in->header;
-      //   pose_array_pub_->publish(pose_array);
-      // }
       
       if(marker_array.markers.size()) {
         marker_array_pub_->publish(marker_array);
@@ -508,9 +457,6 @@ class AdaptiveClustering : public rclcpp::Node {
 
     bool generate_bounding_boxes;
     mutable blackandgold_msgs::msg::Polynomial4Array polynomials;
-    rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr cloud_filtered_pub_;
-    rclcpp::Publisher<blackandgold_msgs::msg::ClusterArray>::SharedPtr cluster_array_pub_;
-    rclcpp::Publisher<geometry_msgs::msg::PoseArray>::SharedPtr pose_array_pub_;
     rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr marker_array_pub_;
     rclcpp::Publisher<autoware_auto_perception_msgs::msg::BoundingBoxArray>::SharedPtr bounding_boxes_pub_;
     rclcpp::Publisher<autoware_auto_perception_msgs::msg::BoundingBoxArray>::SharedPtr vehicle_boxes_pub_;
