@@ -1,4 +1,4 @@
-/*/*/adaptive_clustering:
+lidar_processing_container:
   ros__parameters:
     cluster_size_max: 750
     cluster_size_min: 15
@@ -6,7 +6,7 @@
     k_merging_threshold: 0.10000000149011612
     leaf: 1
     print_fps: false
-    radius_max: 120.0
+    radius_max: 50.0 # 120.0
     radius_min:  0.4000000059604645
     sensor_model: VLP-16
     z_axis_max: 2.0 
@@ -14,5 +14,5 @@
     z_merging_threshold: 0.0 # not used
     car_width: 2.0
     car_length: 4.8768
-    regions: [5, 20, 30, 30, 30]
+    regions: [10, 20, 20] #[5, 20, 30, 30, 30]
     tolerance: 2.0
