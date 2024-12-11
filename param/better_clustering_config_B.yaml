@@ -1,0 +1,27 @@
+car_length: 4.876800060272217
+car_width: 2.0
+cluster_size_max: 5000
+cluster_size_min: 200
+generate_bounding_boxes: true
+k_merging_threshold: 0.10000000149011612
+leaf: 3
+print_fps: false
+qos_overrides./parameter_events.publisher.depth: 1000
+qos_overrides./parameter_events.publisher.durability: volatile
+qos_overrides./parameter_events.publisher.history: keep_last
+qos_overrides./parameter_events.publisher.reliability: reliable
+radius_max: 120.0
+radius_min: 0.3500000059604645
+regions: !!python/object/apply:array.array
+- q
+- - 5
+  - 20
+  - 30
+  - 30
+  - 30
+sensor_model: VLP-16
+tolerance: 2.0
+use_sim_time: false
+z_axis_max: 10.0
+z_axis_min: -0.800000011920929
+z_merging_threshold: 0.0

@@ -57,10 +57,14 @@ class AdaptiveClustering : public rclcpp::Node {
     this->declare_parameter<float>("z_axis_min", -0.8);
     //private_nh.param<float>("z_axis_max", z_axis_max_, 2.0);
     this->declare_parameter<float>("z_axis_max", 10.0);
+
+    std::vector<int64_t> default_cluster_size_min = {50, 25, 20, 10, 5}; // Default values for cluster_size_min
+    std::vector<int64_t> default_cluster_size_max = {200, 150, 100, 50, 30}; // Default values for cluster_size_max
     //private_nh.param<int>("cluster_size_min", s, 3);
-    this->declare_parameter<int>("cluster_size_min", 10);
+    this->declare_parameter<std::vector<int64_t>>("cluster_size_min", default_cluster_size_min);
     //private_nh.param<int>("cluster_size_max", cluster_size_max_, 2200000);
-    this->declare_parameter<int>("cluster_size_max", 5000);
+    this->declare_parameter<std::vector<int64_t>>("cluster_size_max", default_cluster_size_max);
+
     //private_nh.param<int>("leaf", leaf_, 3);
     this->declare_parameter<int>("leaf", 3);
     //private_nh.param<float>("k_merging_threshold", k_merging_threshold_, 0.1);
@@ -80,6 +84,7 @@ class AdaptiveClustering : public rclcpp::Node {
     this->declare_parameter<std::vector<int64_t>>("regions", default_regions);
     // get tolerance from param
     this->declare_parameter<float>("tolerance",2.0);
+    this->declare_parameter<int>("region_max", 5); // how many regions you want to detect.
 
 
 
@@ -87,8 +92,8 @@ class AdaptiveClustering : public rclcpp::Node {
     print_fps_ = this->get_parameter("print_fps").get_parameter_value().get<bool>();
     z_axis_min_ = this->get_parameter("z_axis_min").get_parameter_value().get<float>();
     z_axis_max_ = this->get_parameter("z_axis_max").get_parameter_value().get<float>();
-    cluster_size_min_ = this->get_parameter("cluster_size_min").get_parameter_value().get<int>();
-    cluster_size_max_ = this->get_parameter("cluster_size_max").get_parameter_value().get<int>();
+    cluster_size_min_ = this->get_parameter("cluster_size_min").get_parameter_value().get<std::vector<int64_t>>();
+    cluster_size_max_ = this->get_parameter("cluster_size_max").get_parameter_value().get<std::vector<int64_t>>();
     leaf_ = this->get_parameter("leaf").get_parameter_value().get<int>();
     k_merging_threshold_ = this->get_parameter("k_merging_threshold").get_parameter_value().get<float>();
     z_merging_threshold_ = this->get_parameter("z_merging_threshold").get_parameter_value().get<float>();
@@ -99,6 +104,7 @@ class AdaptiveClustering : public rclcpp::Node {
     car_length_ = this->get_parameter("car_length").get_parameter_value().get<float>();
     regions_ = this->get_parameter("regions").get_parameter_value().get<std::vector<int64_t>>();
     tolerance_ = this->get_parameter("tolerance").get_parameter_value().get<float>();
+    region_max_ = this->get_parameter("region_max").get_parameter_value().get<int>();
 
     /*** Subscribers ***/
     point_cloud_sub = this->create_subscription<sensor_msgs::msg::PointCloud2>("ransac_non_ground", 10, std::bind(&AdaptiveClustering::pointCloudCallback, 
@@ -172,8 +178,8 @@ class AdaptiveClustering : public rclcpp::Node {
       print_fps_ = this->get_parameter("print_fps").get_parameter_value().get<bool>();
       z_axis_min_ = this->get_parameter("z_axis_min").get_parameter_value().get<float>();
       z_axis_max_ = this->get_parameter("z_axis_max").get_parameter_value().get<float>();
-      cluster_size_min_ = this->get_parameter("cluster_size_min").get_parameter_value().get<int>();
-      cluster_size_max_ = this->get_parameter("cluster_size_max").get_parameter_value().get<int>();
+      cluster_size_min_ = this->get_parameter("cluster_size_min").get_parameter_value().get<std::vector<int64_t>>();
+      cluster_size_max_ = this->get_parameter("cluster_size_max").get_parameter_value().get<std::vector<int64_t>>();
       leaf_ = this->get_parameter("leaf").get_parameter_value().get<int>();
       k_merging_threshold_ = this->get_parameter("k_merging_threshold").get_parameter_value().get<float>();
       z_merging_threshold_ = this->get_parameter("z_merging_threshold").get_parameter_value().get<float>();
@@ -220,7 +226,7 @@ class AdaptiveClustering : public rclcpp::Node {
       }
       
       /*** Euclidean clustering ***/
-      //float tolerance = 2.0; // TODO: Retrieve this from param file
+      float tolerance = tolerance_;
       std::vector<pcl::PointCloud<pcl::PointXYZ>::Ptr, Eigen::aligned_allocator<pcl::PointCloud<pcl::PointXYZ>::Ptr > > clusters;
       int last_clusters_begin = 0;
       int last_clusters_end = 0;
@@ -231,8 +237,8 @@ class AdaptiveClustering : public rclcpp::Node {
       //RCLCPP_INFO(this->get_logger(), "Current time: %ld.%09ld", current_time.seconds(), current_time.nanoseconds());
       
       for(int i = 0; i < region_max_; i++) {
-        tolerance_ += 0.0; //3*0.1;
-        if(indices_array[i].size() > cluster_size_min_) {
+        tolerance += 0.5; //3*0.1;
+        if(indices_array[i].size() > cluster_size_min_[i]) {
           #if PCL_VERSION_COMPARE(<, 1, 11, 0)
             boost::shared_ptr<std::vector<int> > indices_array_ptr(new std::vector<int>(indices_array[i]));
           #else
@@ -244,9 +250,9 @@ class AdaptiveClustering : public rclcpp::Node {
 
             std::vector<pcl::PointIndices> cluster_indices;
             pcl::EuclideanClusterExtraction<pcl::PointXYZ> ec;
-            ec.setClusterTolerance(tolerance_);
-            ec.setMinClusterSize(cluster_size_min_);
-            ec.setMaxClusterSize(cluster_size_max_);
+            ec.setClusterTolerance(tolerance);
+            ec.setMinClusterSize(cluster_size_min_[i]);
+            ec.setMaxClusterSize(cluster_size_max_[i]);
             ec.setSearchMethod(tree);
             ec.setInputCloud(pcl_pc_in);
             ec.setIndices(indices_array_ptr);
@@ -360,6 +366,9 @@ class AdaptiveClustering : public rclcpp::Node {
         box.size.x = max[0] - min[0];
         box.size.y = max[1] - min[1];
         box.size.z = max[2] - min[2];
+
+        // set the number of points to the value of the box
+        box.value = clusters[i]->points.size();
         
         // Compute roll angle of bounding box
         // float roll = atan2(max[1] - min[1], max[0] - min[0]);
@@ -427,6 +436,7 @@ class AdaptiveClustering : public rclcpp::Node {
           m.lifetime.sec = 0;
           m.lifetime.nanosec = 100000000;
           wall_bounding_boxes.boxes.push_back(box);
+
           
         }
         else// if (abs(box.centroid.y) < 20.0)
@@ -436,7 +446,7 @@ class AdaptiveClustering : public rclcpp::Node {
           m.color.r = 1.0;
           m.color.g = 0.0;
           m.color.b = 0.0;
-          m.color.a = 0.75;
+          m.color.a = 0.65;
           m.lifetime.sec = 0;
           m.lifetime.nanosec = 100000000;
           vehicle_bounding_boxes.boxes.push_back(box);
@@ -448,20 +458,21 @@ class AdaptiveClustering : public rclcpp::Node {
 
       }
 
-      if(bounding_boxes.boxes.size()) {
-
-        // Deal with headers:
+      if (bounding_boxes.boxes.size()) {
         bounding_boxes.header = ros_pc2_in->header;
         bounding_boxes_pub_->publish(bounding_boxes);
-        vehicle_bounding_boxes.header = ros_pc2_in->header;
         wall_bounding_boxes.header = ros_pc2_in->header;
         marker_array_pub_->publish(bounding_boxes_markers);
-
-        marker_array_pub_->publish(bounding_boxes_markers);
         wall_boxes_pub_->publish(wall_bounding_boxes);
-        vehicle_boxes_pub_->publish(vehicle_bounding_boxes);
-        vehicle_marker_array_pub_->publish(vehicle_markers);
       }
+
+      // Always publish vehicle bounding boxes, even if empty
+      vehicle_bounding_boxes.header = ros_pc2_in->header;
+      vehicle_boxes_pub_->publish(vehicle_bounding_boxes);
+
+      // Always publish vehicle markers, even if empty
+      vehicle_marker_array_pub_->publish(vehicle_markers);
+
       
       if(cluster_array.clusters.size()) {
         cluster_array.header = ros_pc2_in->header;
@@ -485,8 +496,8 @@ class AdaptiveClustering : public rclcpp::Node {
     mutable bool print_fps_;
     mutable float z_axis_min_;
     mutable float z_axis_max_;
-    mutable int cluster_size_min_;
-    mutable int cluster_size_max_;
+    mutable std::vector<int64_t> cluster_size_min_;
+    mutable std::vector<int64_t> cluster_size_max_;
     mutable int leaf_;
     mutable float k_merging_threshold_;
     mutable float z_merging_threshold_;
@@ -496,8 +507,7 @@ class AdaptiveClustering : public rclcpp::Node {
     mutable float car_length_;
     mutable std::vector<int64_t> regions_;
     mutable float tolerance_;
-
-    const int region_max_ = 5; // 10 Change this value to match how far you want to detect.
+    mutable int region_max_ = 5; // 10 Change this value to match how far you want to detect.
 
     mutable int frames; 
     mutable clock_t start_time; 
