@@ -1,9 +1,9 @@
 /*/*/adaptive_clustering:
   ros__parameters:
-    cluster_size_max: [1500, 500, 400, 200, 100] # Increase max cluster sizes for farther regions
-    cluster_size_min: [80, 45, 30, 20, 15]          # Allow smaller clusters in farther regions
+    cluster_size_max: [6000, 5000, 3000, 2000, 100] # Increase max cluster sizes for farther regions
+    cluster_size_min: [300, 200, 55, 28, 28]          # Allow smaller clusters in farther regions
     generate_bounding_boxes: true
-    k_merging_threshold: [0.65, 0.75, 0.75, 0.75, 0.75] # Increase merging threshold for farther regions
+    k_merging_threshold: [0.1, 0.75, 0.75, 0.75, 0.75] # Increase merging threshold for farther regions
     leaf: 1
     print_fps: false
     radius_max: 50.0
@@ -16,7 +16,7 @@
     car_length: 4.8768
     regions: [10, 10, 10, 10, 10]  # Equal 10m-sized regions for consistent tuning
     region_max: 5
-    tolerance: [1.0, 1.2, 1.3, 1.4, 1.5]  # Gradually relaxed clustering tolerance
+    tolerance: [0.5, 1.2, 1.3, 1.3, 1.3]  # Gradually relaxed clustering tolerance
 
 
 
