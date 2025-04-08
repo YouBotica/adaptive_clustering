@@ -472,6 +472,7 @@ class AdaptiveClustering : public rclcpp::Node {
       // Always publish vehicle bounding boxes, even if empty
       vehicle_bounding_boxes.header = ros_pc2_in->header;
       vehicle_boxes_pub_->publish(vehicle_bounding_boxes);
+      bounding_boxes_pub_->publish(bounding_boxes);
 
       // Always publish vehicle markers, even if empty
       vehicle_marker_array_pub_->publish(vehicle_markers);
