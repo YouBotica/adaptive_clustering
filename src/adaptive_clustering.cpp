@@ -429,7 +429,7 @@ class AdaptiveClustering : public rclcpp::Node {
 
         //if (!valid) 
         // NOTE May not need this with the addition of the off-map filter (CarProximityReporter)
-        if ((box.size.x * box.size.y * box.size.z >= 12.0) || box.size.x > 6.0 || (box.size.y / box.size.x > 1.5) || !valid)
+        if ((box.size.x * box.size.y * box.size.z >= 12.0) || !valid || (box.size.x * box.size.y * box.size.z <= 1.0)||box.size.z <= 0.2)
         { // If this is true, the box is bigger than the car
           // marker color
           m.color.r = 0.0;
@@ -442,7 +442,7 @@ class AdaptiveClustering : public rclcpp::Node {
 
           
         }
-        else// if (abs(box.centroid.y) < 20.0)
+        else
         { // The box is a vehicle
           // marker color
           RCLCPP_DEBUG(this->get_logger(), "Poly size: '%i'", polynomials.polynomials.size());
